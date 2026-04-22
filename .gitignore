@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Never commit these
+.env
+data/
+storage/
+__pycache__/
+*.pyc
+.pytest_cache/
+notebooks/.ipynb_checkpoints/
+*.egg-info/
+dist/
+.venv/
+venv/
+logs/
+*.log

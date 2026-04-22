@@ -1,0 +1,26 @@
+[project]
+name = "rag"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic==0.28.0",
+    "einops>=0.8.2",
+    "fastapi==0.111.0",
+    "google-generativeai==0.7.2",
+    "numpy==1.26.4",
+    "ollama==0.2.1",
+    "openai==1.30.5",
+    "pydantic==2.7.1",
+    "pytest==8.2.1",
+    "pytest-asyncio==0.23.7",
+    "python-dotenv==1.0.1",
+    "qdrant-client>=1.9.0",
+    "scikit-fuzzy==0.4.2",
+    "scikit-learn==1.5.0",
+    "sentence-transformers==3.0.1",
+    "torch==2.3.1",
+    "transformers==4.41.2",
+    "uvicorn==0.30.1",
+]
