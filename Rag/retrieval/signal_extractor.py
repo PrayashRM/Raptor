@@ -47,7 +47,9 @@ SPECIFIC_INDICATORS = [
     # Implementation detail hunting
     'learning rate', 'batch size', 'epoch', 'step',
     'dropout', 'regularization', 'weight decay', 'warmup', 'optimizer', 'adam', 'gpu',
-    'parameter', 'layer', 'head', 'dimension', 'size',
+    'parameter', 'layer', 'head', 'dimension', 'size', 'weight decay',
+    'p_drop', 'label smoothing', 'checkpoint',
+    'warmup steps', 'beta', 'epsilon',
 ]
 
 BROAD_INDICATORS = [
@@ -59,7 +61,9 @@ BROAD_INDICATORS = [
     'what problem', 'contribution', 'novel', 'propose',
     'main idea', 'key insight', 'compare', 'versus',
     'what problem', 'what challenge', 'what limitation',
-    'solve', 'address', 'tackle',
+    'solve', 'address', 'tackle', 'overcome', '', '', '',
+    'what does', 'how is', 'in what way',
+    'what role', 'what purpose', 'what effect', 'what impact',
 ]
 
 TABLE_INDICATORS = [
