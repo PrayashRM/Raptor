@@ -23,12 +23,12 @@ google-generativeai==0.7.2
 openai==1.30.5
 anthropic==0.28.0
 
-# Ollama (Phase 3 summarization)
-ollama==0.2.1
+#for phase - 3 & all other API callas
+litellm==1.40.0
+accelerate==0.30.0
 
 # RAPTOR clustering (Phase 3)
 scikit-learn==1.5.0
-scikit-fuzzy==0.4.2
 
 # Testing
 pytest==8.2.1

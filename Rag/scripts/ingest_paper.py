@@ -1,53 +1,48 @@
 # scripts/ingest_paper.py
 """
-CLI entry point for ingestion.
+Ingestion entry point.
 
 Usage:
-    python scripts/ingest_paper.py --input_dir data/parsed/
-    python scripts/ingest_paper.py --paper_dir data/parsed/attention_2017/
+    python scripts/ingest_paper.py
 """
 
-import argparse
-import json
 import sys
 from pathlib import Path
 
-# Allow imports from project root
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ingestion_Phase2.pipeline import ingest_paper, ingest_batch
+from ingestion.pipeline import ingest_paper, ingest_batch
 from core.logger import get_logger
 
 logger = get_logger("ingest_script")
 
+# ── Configure paths directly here ─────────────────────────────────────────────
+
+# Option A: Single paper — set path to the paper directory
+PAPER_DIR = Path("data/parsed/attention_is_all_you_need_2017")
+
+# Option B: Batch — set path to parent directory containing all papers
+# Set PAPER_DIR = None and set INPUT_DIR instead
+INPUT_DIR = None
+
+# ──────────────────────────────────────────────────────────────────────────────
+
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Ingest parsed research papers into RAPTOR RAG"
-    )
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
-        "--paper_dir",
-        type=Path,
-        help="Path to single paper directory containing elements.json",
-    )
-    group.add_argument(
-        "--input_dir",
-        type=Path,
-        help="Path to directory containing multiple paper subdirectories",
-    )
-    args = parser.parse_args()
-
-    if args.paper_dir:
-        report = ingest_paper(args.paper_dir)
+    if PAPER_DIR is not None:
+        report  = ingest_paper(PAPER_DIR)
         reports = [report]
-    else:
-        reports = ingest_batch(args.input_dir)
 
-    # Print summary
-    print("\n" + "="*60)
+    elif INPUT_DIR is not None:
+        reports = ingest_batch(INPUT_DIR)
+
+    else:
+        print("ERROR: Set either PAPER_DIR or INPUT_DIR at top of script.")
+        sys.exit(1)
+
+    print("\n" + "=" * 60)
     print("INGESTION SUMMARY")
-    print("="*60)
+    print("=" * 60)
     for r in reports:
         status_icon = "✅" if r.status == "SUCCESS" else "❌"
         print(

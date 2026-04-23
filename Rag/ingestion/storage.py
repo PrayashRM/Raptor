@@ -41,21 +41,43 @@ class QdrantStorage:
         self._ensure_payload_indexes()
 
     def _connect(self) -> QdrantClient:
-        """Connect to Qdrant, fail fast with clear error if unavailable."""
+        """
+        Connect to Qdrant.
+        Local mode:  uses path (development, no server needed)
+        Server mode: uses host + port (production, supports concurrency)
+        Controlled via config.QDRANT_USE_SERVER boolean.
+        """
         try:
-            client = QdrantClient(
-                path=str(config.STORAGE_DIR),
-            )
-            # Verify connection with a lightweight call
+            import logging
+            logging.getLogger("qdrant_client").setLevel(logging.ERROR)
+
+            if config.QDRANT_USE_SERVER:
+                # Production: server mode
+                # Supports concurrent access, payload indexes work
+                client = QdrantClient(
+                    host   = config.QDRANT_HOST,
+                    port   = config.QDRANT_PORT,
+                )
+                mode = f"server ({config.QDRANT_HOST}:{config.QDRANT_PORT})"
+            else:
+                # Development: local embedded mode
+                # No server needed, single instance only
+                config.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+                client = QdrantClient(
+                    path = str(config.STORAGE_DIR),
+                )
+                mode = f"local ({config.STORAGE_DIR})"
+
             client.get_collections()
-            logger.info(
-                f"Connected to Qdrant at path: {config.STORAGE_DIR}"
-            )
+            logger.info(f"Connected to Qdrant [{mode}]")
             return client
+
         except Exception as e:
             raise QdrantConnectionError(
-                f"Cannot connect to Qdrant at {config.STORAGE_DIR}. "
-                f"Error: {e}"
+                f"Cannot connect to Qdrant. Error: {e}\n"
+                f"QDRANT_USE_SERVER={config.QDRANT_USE_SERVER}\n"
+                f"If local: check STORAGE_DIR path.\n"
+                f"If server: check QDRANT_HOST and QDRANT_PORT."
             ) from e
 
     def _ensure_collection(self):

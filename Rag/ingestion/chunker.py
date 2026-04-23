@@ -24,7 +24,7 @@ from core.utils import (
     find_sentence_boundary, normalize_section_title
 )
 from core.exceptions import ChunkingError
-from ingestion_Phase2.section_filter import (
+from ingestion.section_filter import (
     get_section_treatment, should_embed,
     get_importance_from_treatment, get_boost_from_treatment,
     get_query_affinities

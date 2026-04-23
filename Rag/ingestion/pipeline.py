@@ -3,7 +3,20 @@
 Main ingestion orchestrator.
 Reads parsed JSON → chunks → embeds → stores.
 Writes debug dumps and ingestion report.
+
+Works with both local Qdrant (development) and
+server Qdrant (production) — controlled via config.
 """
+
+
+# LOCAL (current, development):
+# QdrantStorage uses: QdrantClient(path=str(config.STORAGE_DIR))
+
+# SERVER (production):
+# QdrantStorage uses: QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+
+
+
 
 from __future__ import annotations
 import json
@@ -11,16 +24,18 @@ import time
 from pathlib import Path
 from datetime import datetime, timezone
 
-from core.models import ParsedDocument, DocumentMeta, IngestionReport
+from core.models import ParsedDocument, IngestionReport
 from core.logger import get_logger
 from core.exceptions import IngestionError, InputFormatError
-from ingestion_Phase2.chunker import build_chunks
-from ingestion_Phase2.embedder import Embedder
-from ingestion_Phase2.storage import QdrantStorage
+from ingestion.chunker import build_chunks
+from ingestion.embedder import Embedder
+from ingestion.storage import QdrantStorage
 import config
 
 logger = get_logger(__name__)
 
+
+# ── Private helpers ────────────────────────────────────────────────────────────
 
 def _load_parsed_document(elements_path: Path) -> ParsedDocument:
     """
@@ -87,22 +102,64 @@ def _write_chunks_debug(
 
 def _write_references_meta(
     references_list: list[str],
-    paper_id: str,
-    parsed_dir: Path,
+    paper_dir: Path,
 ):
-    """Write references to parsed directory as document-level metadata."""
-    ref_path = parsed_dir / paper_id / "references.json"
+    """Write references.json to paper directory as document-level metadata."""
+    ref_path = paper_dir / "references.json"
     with open(ref_path, "w", encoding="utf-8") as f:
         json.dump(
-            {"paper_id": paper_id, "references": references_list},
+            {
+                "paper_id":   paper_dir.name,
+                "references": references_list,
+            },
             f, indent=2, ensure_ascii=False
         )
     logger.debug(f"References metadata written to {ref_path}")
 
 
+def _make_failed_report(
+    paper_id: str,
+    total_elems: int,
+    start_time: float,
+    errors: list[str],
+    chunks_meta: list = None,
+    chunk_report: dict = None,
+    sections_seen: list = None,
+) -> IngestionReport:
+    """Build a FAILED IngestionReport. Centralizes the repetitive pattern."""
+    return IngestionReport(
+        paper_id                   = paper_id,
+        total_elements_input       = total_elems,
+        elements_skipped           = 0,
+        elements_processed         = sum(
+            len(c.source_element_ids) for c in chunks_meta
+        ) if chunks_meta else 0,
+        total_chunks_created       = len(chunks_meta) if chunks_meta else 0,
+        soft_splits                = chunk_report["soft_splits"] if chunk_report else 0,
+        self_contained_chunks      = chunk_report["self_contained"] if chunk_report else 0,
+        merged_chunks              = (
+            len(chunks_meta) - chunk_report["self_contained"]
+        ) if chunks_meta and chunk_report else 0,
+        min_chunk_tokens           = chunk_report["min_tokens"] if chunk_report else 0,
+        max_chunk_tokens           = chunk_report["max_tokens"] if chunk_report else 0,
+        avg_chunk_tokens           = chunk_report["avg_tokens"] if chunk_report else 0.0,
+        sections_processed         = sections_seen or [],
+        sections_skipped           = list(config.SECTIONS_TO_SKIP),
+        ingestion_duration_seconds = round(time.time() - start_time, 2),
+        status                     = "FAILED",
+        errors                     = errors,
+    )
+
+
+# ── Main pipeline ──────────────────────────────────────────────────────────────
+
 def ingest_paper(paper_dir_path: Path) -> IngestionReport:
     """
     Ingest a single paper from its parsed directory.
+
+    Works with both local Qdrant (path-based) and
+    server Qdrant (host/port-based).
+    Controlled entirely via config.py — no code change needed.
 
     Args:
         paper_dir_path: Path to directory containing elements.json
@@ -111,8 +168,11 @@ def ingest_paper(paper_dir_path: Path) -> IngestionReport:
     Returns:
         IngestionReport with full stats and status.
     """
-    start_time = time.time()
-    errors     = []
+    start_time    = time.time()
+    errors        = []
+    chunks_meta   = None
+    chunk_report  = None
+    sections_seen = None
 
     logger.info(f"{'='*60}")
     logger.info(f"Starting ingestion: {paper_dir_path}")
@@ -124,23 +184,8 @@ def ingest_paper(paper_dir_path: Path) -> IngestionReport:
         document = _load_parsed_document(elements_path)
     except InputFormatError as e:
         logger.error(str(e))
-        return IngestionReport(
-            paper_id                 = paper_dir_path.name,
-            total_elements_input     = 0,
-            elements_skipped         = 0,
-            elements_processed       = 0,
-            total_chunks_created     = 0,
-            soft_splits              = 0,
-            self_contained_chunks    = 0,
-            merged_chunks            = 0,
-            min_chunk_tokens         = 0,
-            max_chunk_tokens         = 0,
-            avg_chunk_tokens         = 0.0,
-            sections_processed       = [],
-            sections_skipped         = [],
-            ingestion_duration_seconds = time.time() - start_time,
-            status                   = "FAILED",
-            errors                   = [str(e)],
+        return _make_failed_report(
+            paper_dir_path.name, 0, start_time, [str(e)]
         )
 
     paper_id    = document.document.paper_id
@@ -149,56 +194,54 @@ def ingest_paper(paper_dir_path: Path) -> IngestionReport:
     # ── Step 2: Write document_meta.json ──────────────────────────────────
     _write_document_meta(document, paper_dir_path)
 
-    # ── Step 3: Build chunks ───────────────────────────────────────────────
+    # ── Step 3: Initialize single Qdrant storage instance ─────────────────
+    # One instance for the entire pipeline.
+    # Local Qdrant: cannot have two instances open simultaneously.
+    # Server Qdrant: no such restriction, but single instance is cleaner.
+    try:
+        storage = QdrantStorage()
+    except Exception as e:
+        logger.error(f"Qdrant connection failed: {e}")
+        return _make_failed_report(
+            paper_id, total_elems, start_time,
+            [f"Qdrant connection failed: {e}"]
+        )
+
+    # ── Step 4: Build chunks ───────────────────────────────────────────────
     logger.info("Phase 2A: Chunking elements...")
     try:
         chunks_meta, references_list = build_chunks(document)
     except Exception as e:
         logger.error(f"Chunking failed: {e}")
-        errors.append(f"Chunking error: {e}")
-        return IngestionReport(
-            paper_id                   = paper_id,
-            total_elements_input       = total_elems,
-            elements_skipped           = 0,
-            elements_processed         = 0,
-            total_chunks_created       = 0,
-            soft_splits                = 0,
-            self_contained_chunks      = 0,
-            merged_chunks              = 0,
-            min_chunk_tokens           = 0,
-            max_chunk_tokens           = 0,
-            avg_chunk_tokens           = 0.0,
-            sections_processed         = [],
-            sections_skipped           = [],
-            ingestion_duration_seconds = time.time() - start_time,
-            status                     = "FAILED",
-            errors                     = errors,
+        return _make_failed_report(
+            paper_id, total_elems, start_time,
+            [f"Chunking error: {e}"]
         )
 
-    # ── Step 4: Write references metadata ─────────────────────────────────
+    # ── Step 5: Write references metadata ─────────────────────────────────
     if references_list:
-        _write_references_meta(references_list, paper_id, config.PARSED_DIR)
+        _write_references_meta(references_list, paper_dir_path)
 
-    # ── Step 5: Write chunks debug dump ───────────────────────────────────
-    token_counts = [c.token_count for c in chunks_meta]
+    # ── Step 6: Write chunks debug dump ───────────────────────────────────
+    token_counts  = [c.token_count for c in chunks_meta]
     sections_seen = list({c.section_title for c in chunks_meta})
 
     chunk_report = {
-        "paper_id":           paper_id,
-        "total_chunks":       len(chunks_meta),
-        "total_elements_in":  total_elems,
-        "soft_splits":        sum(1 for c in chunks_meta if c.soft_split),
-        "self_contained":     sum(
+        "paper_id":       paper_id,
+        "total_chunks":   len(chunks_meta),
+        "total_elements": total_elems,
+        "soft_splits":    sum(1 for c in chunks_meta if c.soft_split),
+        "self_contained": sum(
             1 for c in chunks_meta
             if c.chunk_type in ("table", "equation", "figure")
             and len(c.source_element_ids) == 1
         ),
-        "min_tokens":         min(token_counts) if token_counts else 0,
-        "max_tokens":         max(token_counts) if token_counts else 0,
-        "avg_tokens":         round(
+        "min_tokens":     min(token_counts) if token_counts else 0,
+        "max_tokens":     max(token_counts) if token_counts else 0,
+        "avg_tokens":     round(
             sum(token_counts) / len(token_counts), 1
         ) if token_counts else 0.0,
-        "sections":           sections_seen,
+        "sections":       sections_seen,
     }
 
     _write_chunks_debug(
@@ -207,45 +250,46 @@ def ingest_paper(paper_dir_path: Path) -> IngestionReport:
         chunk_report,
     )
 
-    # ── Step 6: Embed chunks ───────────────────────────────────────────────
-    logger.info("Phase 2B: Embedding chunks...")
+    # ── Step 7: Clear existing Qdrant data for this paper ─────────────────
+    # Deletes ONLY this paper's points.
+    # All other papers in the collection are completely untouched.
+    # Non-fatal: if delete fails, upsert deduplication is the safety net.
+    logger.info(
+        f"Phase 2B: Clearing existing data for '{paper_id}' from Qdrant..."
+    )
     try:
-        embedder      = Embedder()
+        storage.delete_paper(paper_id)
+    except Exception as e:
+        logger.warning(
+            f"Could not clear existing data for '{paper_id}': {e}. "
+            f"Proceeding — content-hash dedup will handle duplicates."
+        )
+
+    # ── Step 8: Embed chunks ───────────────────────────────────────────────
+    logger.info("Phase 2C: Embedding chunks...")
+    try:
+        embedder        = Embedder()
         embedded_chunks = embedder.embed_chunks(chunks_meta)
     except Exception as e:
         logger.error(f"Embedding failed: {e}")
-        errors.append(f"Embedding error: {e}")
-        return IngestionReport(
-            paper_id                   = paper_id,
-            total_elements_input       = total_elems,
-            elements_skipped           = 0,
-            elements_processed         = len(chunks_meta),
-            total_chunks_created       = len(chunks_meta),
-            soft_splits                = chunk_report["soft_splits"],
-            self_contained_chunks      = chunk_report["self_contained"],
-            merged_chunks              = len(chunks_meta),
-            min_chunk_tokens           = chunk_report["min_tokens"],
-            max_chunk_tokens           = chunk_report["max_tokens"],
-            avg_chunk_tokens           = chunk_report["avg_tokens"],
-            sections_processed         = sections_seen,
-            sections_skipped           = [],
-            ingestion_duration_seconds = time.time() - start_time,
-            status                     = "FAILED",
-            errors                     = errors,
+        return _make_failed_report(
+            paper_id, total_elems, start_time,
+            [f"Embedding error: {e}"],
+            chunks_meta, chunk_report, sections_seen,
         )
 
-    # ── Step 7: Store in Qdrant ────────────────────────────────────────────
-    logger.info("Phase 2C: Storing in Qdrant...")
+    # ── Step 9: Store in Qdrant ────────────────────────────────────────────
+    logger.info("Phase 2D: Storing in Qdrant...")
+    upserted_count = 0
     try:
-        storage       = QdrantStorage()
         upserted_count = storage.upsert_chunks(embedded_chunks)
+        status = "SUCCESS"
     except Exception as e:
         logger.error(f"Storage failed: {e}")
         errors.append(f"Storage error: {e}")
         status = "FAILED"
-    else:
-        status = "SUCCESS"
 
+    # ── Final report ───────────────────────────────────────────────────────
     duration = time.time() - start_time
 
     report = IngestionReport(
@@ -260,7 +304,9 @@ def ingest_paper(paper_dir_path: Path) -> IngestionReport:
         total_chunks_created       = len(chunks_meta),
         soft_splits                = chunk_report["soft_splits"],
         self_contained_chunks      = chunk_report["self_contained"],
-        merged_chunks              = len(chunks_meta) - chunk_report["self_contained"],
+        merged_chunks              = (
+            len(chunks_meta) - chunk_report["self_contained"]
+        ),
         min_chunk_tokens           = chunk_report["min_tokens"],
         max_chunk_tokens           = chunk_report["max_tokens"],
         avg_chunk_tokens           = chunk_report["avg_tokens"],
@@ -287,9 +333,12 @@ def ingest_batch(input_dir: Path) -> list[IngestionReport]:
     Ingest all papers found in input_dir.
     Each subdirectory containing elements.json is treated as one paper.
 
+    Works with both local and server Qdrant.
+    Each paper gets its own storage instance to avoid
+    local Qdrant single-instance constraint across papers.
+
     Args:
         input_dir: Path to directory containing paper subdirectories
-                   e.g., data/parsed/
 
     Returns:
         List of IngestionReport, one per paper.
@@ -315,7 +364,6 @@ def ingest_batch(input_dir: Path) -> list[IngestionReport]:
         report = ingest_paper(paper_dir)
         reports.append(report)
 
-    # Summary
     succeeded = sum(1 for r in reports if r.status == "SUCCESS")
     failed    = sum(1 for r in reports if r.status == "FAILED")
     logger.info(
