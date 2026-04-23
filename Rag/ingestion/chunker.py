@@ -34,6 +34,75 @@ import config
 logger = get_logger(__name__)
 
 
+def _validate_and_fix_table_rows(
+    element: ParsedElement,
+) -> ParsedElement:
+    """
+    Detect and fix table column misalignment from parser.
+
+    Problem: Parser sometimes shifts all column values
+    one position right, putting row labels in wrong columns.
+
+    Detection: If header_row exists and first data row has
+    the first header value as the row identifier (e.g., "base",
+    "(A)", "big"), and numeric values in wrong columns.
+
+    Fix: Rebuild text_for_embedding with correct interpretation.
+    Cannot fix the rows structure (parser issue),
+    but can improve the embedding text.
+    """
+    if element.type != "table":
+        return element
+
+    content = element.content
+    if not content.rows or not content.header_row:
+        return element
+
+    # Check for misalignment symptom:
+    # First column header is a label column (N, Row, Model, etc.)
+    # but first data value in that column is a semantic label
+    # not a numeric value
+    header_row = content.header_row
+    if not header_row:
+        return element
+
+    first_header = header_row[0].strip().lower() if header_row else ""
+    row_label_headers = {"n", "row", "model", "method", "layer type", ""}
+
+    # Check if first column is being misused as row index
+    misalignment_detected = False
+    if first_header in row_label_headers and content.rows:
+        first_row = content.rows[0]
+        first_col_value = str(
+            first_row.get(header_row[0], "")
+        ).strip()
+        # If first column value is a semantic label not a number
+        if first_col_value and not first_col_value.replace(
+            ".", ""
+        ).replace("-", "").isdigit():
+            misalignment_detected = True
+
+    if misalignment_detected:
+        logger.warning(
+            f"Table column misalignment detected in "
+            f"{element.element_id}. "
+            f"Using caption-only embedding as fallback."
+        )
+        # Cannot fix rows without knowing the correct mapping
+        # Use caption + header as the embedding instead
+        # The image_path_for_vlm still provides the actual table
+        if element.phase2_ready:
+            caption   = content.caption or ""
+            headers   = " | ".join(header_row)
+            safe_text = f"{caption}\n\nColumns: {headers}"
+            element.phase2_ready.text_for_embedding = safe_text
+            element.phase2_ready.embedding_notes = (
+                "column_misalignment_detected_caption_only"
+            )
+
+    return element
+
+
 class ElementBuffer:
     """
     Accumulates elements until a flush condition is met.
@@ -357,6 +426,10 @@ def build_chunks(document: ParsedDocument) -> list[ChunkMetadata]:
         )
 
     for i, element in enumerate(elements):
+
+        if element.type == "table":
+            element = _validate_and_fix_table_rows(element)
+
         treatment = get_section_treatment(element)
         action    = element.phase2_ready.action
 
