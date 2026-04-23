@@ -218,49 +218,90 @@ def _call_single_model(
     raise GenerationError(f"Model {model} exhausted retries")
 
 
+def _model_has_valid_key(model: str) -> bool:
+    """
+    Check if required API key is configured for a model.
+    Prevents sending empty Bearer token which crashes httpx.
+    """
+    model_lower = model.lower()
+
+    if "openrouter" in model_lower:
+        return bool(config.OPENROUTER_API_KEY)
+    if "groq" in model_lower:
+        return bool(config.GROQ_API_KEYS)
+    if "gemini" in model_lower or "vertex" in model_lower:
+        return bool(config.GEMINI_API_KEYS)
+    if "gpt" in model_lower or "openai" in model_lower:
+        return bool(os.getenv("OPENAI_API_KEY", ""))
+    if "claude" in model_lower or "anthropic" in model_lower:
+        return bool(os.getenv("ANTHROPIC_API_KEY", ""))
+    if "ollama" in model_lower:
+        return True  # local, no key needed
+
+    # Unknown model: attempt anyway, fail gracefully
+    return True
+
+
+
 def call_llm(
     messages: list[dict],
     max_tokens: int = None,
     temperature: float = None,
     byok_model: str = "",
     byok_key: str = "",
-) -> str:
+) -> tuple[str, str]:
     """
     Main LLM call with full fallback chain.
 
-    Priority:
-    1. BYOK model + key (user provided)
-    2. System primary model + key rotation
-    3. Fallback chain models
-
-    Returns generated text string.
-    Raises GenerationError only if ALL models fail.
+    Returns:
+        Tuple of (generated_text, model_that_succeeded)
+    Raises:
+        GenerationError if ALL models fail.
     """
-    max_tokens  = max_tokens or config.GENERATION_MAX_TOKENS
+    max_tokens  = max_tokens  or config.GENERATION_MAX_TOKENS
     temperature = temperature or config.GENERATION_TEMPERATURE
 
     # Build model chain
     if byok_model and byok_key:
-        # BYOK: user's model goes first
         model_chain = [(byok_model, byok_key)]
-        # Add system fallbacks without BYOK key
         model_chain += [
-            (m, "") for m in [config.GENERATION_PRIMARY_MODEL]
+            (m, "") for m in
+            [config.GENERATION_PRIMARY_MODEL]
             + config.GENERATION_FALLBACK_MODELS
         ]
     else:
-        # System keys only
         model_chain = [
-            (m, "") for m in [config.GENERATION_PRIMARY_MODEL]
+            (m, "") for m in
+            [config.GENERATION_PRIMARY_MODEL]
             + config.GENERATION_FALLBACK_MODELS
         ]
 
-    last_error = None
-
-    for model_idx, (model, key) in enumerate(model_chain):
+    # Filter models with missing API keys
+    # Prevents "Bearer " empty token crash
+    valid_chain = []
+    for model, key in model_chain:
         if not model:
             continue
+        override_key = key or ""
+        if override_key:
+            # BYOK key provided explicitly — always valid
+            valid_chain.append((model, override_key))
+        elif _model_has_valid_key(model):
+            valid_chain.append((model, ""))
+        else:
+            logger.debug(
+                f"Skipping {model}: no API key configured"
+            )
 
+    if not valid_chain:
+        raise GenerationError(
+            "No models with valid API keys available. "
+            "Check your .env file for API keys."
+        )
+
+    last_error = None
+
+    for model_idx, (model, key) in enumerate(valid_chain):
         is_fallback = model_idx > 0
         if is_fallback:
             logger.warning(
@@ -269,16 +310,18 @@ def call_llm(
 
         try:
             result = _call_single_model(
-                model       = model,
-                messages    = messages,
-                max_tokens  = max_tokens,
-                temperature = temperature,
+                model        = model,
+                messages     = messages,
+                max_tokens   = max_tokens,
+                temperature  = temperature,
                 override_key = key,
             )
 
             if is_fallback:
                 logger.info(f"Fallback succeeded: {model}")
-            return result
+
+            # Return both answer AND the model that worked
+            return result, model
 
         except GenerationError as e:
             last_error = e
@@ -286,6 +329,6 @@ def call_llm(
             continue
 
     raise GenerationError(
-        f"All models in fallback chain failed. "
+        f"All {len(valid_chain)} models failed. "
         f"Last error: {last_error}"
     )

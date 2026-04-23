@@ -121,13 +121,10 @@ GENERATION_PRIMARY_MODEL = os.getenv(
 # System default fallback chain
 # Multiple Gemini keys rotate automatically on rate limit
 GENERATION_FALLBACK_MODELS = [
-    m for m in [
-        os.getenv("GENERATION_FALLBACK_1", "gemini/gemini-2.0-flash"),
-        os.getenv("GENERATION_FALLBACK_2", "gemini/gemini-2.5-flash"),
-        os.getenv("GENERATION_FALLBACK_3", "groq/llama-3.1-70b-versatile"),
-        os.getenv("GENERATION_FALLBACK_4", "groq/llama-3.1-8b-instant"),
-        os.getenv("GENERATION_FALLBACK_5", "openrouter/google/gemini-2.0-flash-exp:free"),
-    ] if m
+    os.getenv("GENERATION_FALLBACK_1", "gemini/gemini-2.5-flash"),
+    os.getenv("GENERATION_FALLBACK_2", "groq/llama-3.1-70b-versatile"),
+    os.getenv("GENERATION_FALLBACK_3", "groq/llama-3.1-8b-instant"),
+    os.getenv("GENERATION_FALLBACK_4", "openrouter/google/gemini-2.0-flash-exp:free"),
 ]
 
 # Multiple API keys for rotation (same provider, different keys)

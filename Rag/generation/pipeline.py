@@ -144,18 +144,15 @@ def generate_answer(
     # ── Step 4: Generate answer ────────────────────────────────────────────
     model_used = ""
     try:
-        answer = call_llm(
+        answer, model_used = call_llm(
             messages    = messages,
             byok_model  = byok_model,
             byok_key    = byok_key,
         )
-        # Determine which model was actually used
-        model_used = byok_model or config.GENERATION_PRIMARY_MODEL
 
     except GenerationError as e:
         logger.error(f"All LLM models failed: {e}")
-        # Last resort: return context directly without generation
-        answer = (
+        answer     = (
             "Generation failed due to API issues. "
             "Here is the raw relevant context:\n\n"
             + context.context_text[:2000]
