@@ -93,6 +93,10 @@ FCM_RANDOM_STATE             = 42
 FCM_MEMBERSHIP_THRESHOLD     = 0.25
 FCM_MAX_CLUSTERS_PER_CHUNK   = 2
 
+# ── Retrieval ─────────────────────────────────────────────────────────────────
+RERANKER_MODEL     = "BAAI/bge-reranker-v2-m3"
+RERANKER_MIN_SCORE = 0.25
+
 # ── Summary Validation ────────────────────────────────────────────────────────
 SUMMARY_COMPRESSION_MAX      = 0.6
 SEMANTIC_DEDUP_THRESHOLD     = 0.90
