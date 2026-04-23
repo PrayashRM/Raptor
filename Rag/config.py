@@ -101,12 +101,86 @@ RERANKER_MIN_SCORE = 0.25
 SUMMARY_COMPRESSION_MAX      = 0.6
 SEMANTIC_DEDUP_THRESHOLD     = 0.90
 
-# ── Generation ────────────────────────────────────────────────────────────────
-GENERATION_LLM_PROVIDER = os.getenv("GENERATION_LLM_PROVIDER", "gemini")
-GENERATION_LLM_MODEL    = os.getenv("GENERATION_LLM_MODEL",    "gemini-2.5-pro")
-GEMINI_API_KEY          = os.getenv("GEMINI_API_KEY",  "")
-OPENAI_API_KEY          = os.getenv("OPENAI_API_KEY",  "")
-ANTHROPIC_API_KEY       = os.getenv("ANTHROPIC_API_KEY", "")
+
+
+
+
+# ── Generation (Phase 6) ──────────────────────────────────────────────────────
+
+# BYOK — user provides their own key via env
+# If not provided, falls back to system default keys below
+GENERATION_BYOK_MODEL   = os.getenv("GENERATION_BYOK_MODEL", "")
+GENERATION_BYOK_API_KEY = os.getenv("GENERATION_BYOK_API_KEY", "")
+
+# System default primary model
+GENERATION_PRIMARY_MODEL = os.getenv(
+    "GENERATION_PRIMARY_MODEL",
+    "gemini/gemini-2.0-flash"
+)
+
+# System default fallback chain
+# Multiple Gemini keys rotate automatically on rate limit
+GENERATION_FALLBACK_MODELS = [
+    m for m in [
+        os.getenv("GENERATION_FALLBACK_1", "gemini/gemini-2.0-flash"),
+        os.getenv("GENERATION_FALLBACK_2", "gemini/gemini-2.5-flash"),
+        os.getenv("GENERATION_FALLBACK_3", "groq/llama-3.1-70b-versatile"),
+        os.getenv("GENERATION_FALLBACK_4", "groq/llama-3.1-8b-instant"),
+        os.getenv("GENERATION_FALLBACK_5", "openrouter/google/gemini-2.0-flash-exp:free"),
+    ] if m
+]
+
+# Multiple API keys for rotation (same provider, different keys)
+# Prevents rate limit by distributing across keys
+GEMINI_API_KEYS = [
+    k for k in [
+        os.getenv("GEMINI_API_KEY_1", os.getenv("GEMINI_API_KEY", "")),
+        os.getenv("GEMINI_API_KEY_2", ""),
+        os.getenv("GEMINI_API_KEY_3", ""),
+    ] if k
+]
+
+GROQ_API_KEYS = [
+    k for k in [
+        os.getenv("GROQ_API_KEY_1", os.getenv("GROQ_API_KEY", "")),
+        os.getenv("GROQ_API_KEY_2", ""),
+    ] if k
+]
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+
+# Generation parameters
+GENERATION_TEMPERATURE    = float(os.getenv("GENERATION_TEMPERATURE", "0.1"))
+GENERATION_MAX_TOKENS     = int(os.getenv("GENERATION_MAX_TOKENS", "2048"))
+GENERATION_REQUEST_TIMEOUT = 120
+
+# Context window management
+# Reserve tokens for: system prompt + query + answer
+GENERATION_CONTEXT_RESERVE = 1024  # tokens reserved for non-context
+GENERATION_MAX_CONTEXT_TOKENS = {
+    # Model context limits (conservative, 65% of actual)
+    "gemini/gemini-2.0-flash":   int(1_048_576 * 0.65),
+    "gemini/gemini-2.5-flash":   int(1_048_576 * 0.65),
+    "groq/llama-3.1-70b-versatile": int(131_072 * 0.65),
+    "groq/llama-3.1-8b-instant":    int(131_072 * 0.65),
+    "gpt-4o":                    int(128_000 * 0.65),
+    "gpt-4o-mini":               int(128_000 * 0.65),
+    "claude-3-5-sonnet-20241022": int(200_000 * 0.65),
+    "default":                   int(32_000 * 0.65),
+}
+
+# Retry config
+GENERATION_MAX_RETRIES    = 5
+GENERATION_RETRY_BASE     = 5
+GENERATION_RETRY_MAX      = 120
+
+# Privacy
+GENERATION_PRIVACY_SAFE_LOGGING = True
+
+
+
+
+
 
 # ── Sections ──────────────────────────────────────────────────────────────────
 SECTIONS_TO_SKIP = {
