@@ -353,12 +353,36 @@ class QdrantStorage:
         sibling_ids: list[str],
     ):
         """
-        Update RAPTOR tree link fields on existing leaf chunks.
-        Called by Phase 3 after clustering to backfill parent_ids,
-        cluster_ids, cluster_probabilities, sibling_ids.
-        Uses Qdrant set_payload to update without re-embedding.
+        Update RAPTOR tree link fields on existing chunks.
+        Works with both local and server Qdrant.
         """
         try:
+            # First find the point ID for this chunk_id
+            results, _ = self.client.scroll(
+                collection_name = self.collection,
+                scroll_filter   = Filter(
+                    must=[
+                        FieldCondition(
+                            key   = chunk_id_field,
+                            match = MatchValue(value=chunk_id_value),
+                        )
+                    ]
+                ),
+                with_payload = False,
+                with_vectors = False,
+                limit        = 1,
+            )
+
+            if not results:
+                logger.warning(
+                    f"Chunk '{chunk_id_value}' not found in Qdrant "
+                    f"for RAPTOR link update"
+                )
+                return
+
+            # Use point UUID for set_payload (works in local mode)
+            point_uuid = results[0].id
+
             self.client.set_payload(
                 collection_name = self.collection,
                 payload         = {
@@ -367,17 +391,11 @@ class QdrantStorage:
                     "cluster_probabilities": cluster_probabilities,
                     "sibling_ids":           sibling_ids,
                 },
-                points = Filter(
-                    must=[
-                        FieldCondition(
-                            key   = "chunk_id",
-                            match = MatchValue(value=chunk_id_value),
-                        )
-                    ]
-                ),
+                points = [point_uuid],   # list of UUIDs, not Filter
             )
+
         except Exception as e:
             raise StorageError(
-                f"Failed to update RAPTOR links for chunk "
+                f"Failed to update RAPTOR links for "
                 f"'{chunk_id_value}': {e}"
             ) from e
