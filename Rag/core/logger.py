@@ -22,8 +22,15 @@ def get_logger(name: str) -> logging.Logger:
     )
 
     # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    import io
+    console_handler = logging.StreamHandler(
+        io.TextIOWrapper(
+            sys.stdout.buffer,
+            encoding='utf-8',
+            errors='replace'
+        )
+    )
+    console_handler.setLevel(logging.INFO)      
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 

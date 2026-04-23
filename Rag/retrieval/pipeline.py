@@ -130,9 +130,7 @@ class RetrievalPipeline:
 
         logger.info(
             f"Retrieval complete: "
-            f"candidates={total_candidates} → "
-            f"reranked={after_rerank} → "
-            f"final={after_traversal}"
+            f"candidates={total_candidates} -> reranked={after_rerank} -> final={after_traversal}"
         )
 
         return RetrievalResult(

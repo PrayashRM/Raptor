@@ -46,7 +46,7 @@ SPECIFIC_INDICATORS = [
     'wmt', 'newstest', 'dataset',
     # Implementation detail hunting
     'learning rate', 'batch size', 'epoch', 'step',
-    'dropout', 'warmup', 'optimizer', 'adam', 'gpu',
+    'dropout', 'regularization', 'weight decay', 'warmup', 'optimizer', 'adam', 'gpu',
     'parameter', 'layer', 'head', 'dimension', 'size',
 ]
 
@@ -58,6 +58,8 @@ BROAD_INDICATORS = [
     'summarize', 'what is', 'how does this work',
     'what problem', 'contribution', 'novel', 'propose',
     'main idea', 'key insight', 'compare', 'versus',
+    'what problem', 'what challenge', 'what limitation',
+    'solve', 'address', 'tackle',
 ]
 
 TABLE_INDICATORS = [
