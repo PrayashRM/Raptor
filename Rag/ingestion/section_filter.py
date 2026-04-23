@@ -20,9 +20,76 @@ INLINE_SKIP_MARKERS = {
 }
 
 
+# ingestion/section_filter.py
+"""
+Determines treatment for every element based on its section.
+"""
+
+from core.models import ParsedElement
+from core.logger import get_logger
+from core.utils import normalize_section_title
+import config
+import re
+
+logger = get_logger(__name__)
+
+# Inline section markers that appear without a formal header
+INLINE_SKIP_MARKERS = {
+    "acknowledgements",
+    "acknowledgments",
+    "acknowledgement",
+    "acknowledgment",
+}
+
+# Footnote detection patterns
+# Footnotes start with a number marker at the beginning
+FOOTNOTE_START_PATTERN = re.compile(
+    r'^\s*\d+\s+[A-Z]',  # "5 We used values..."
+)
+
+# Footnote anchor pattern in text (superscript reference)
+FOOTNOTE_ANCHOR_PATTERN = re.compile(
+    r'\b\d+\s*$'  # ends with a number (footnote marker)
+)
+
+
+def detect_element_subtype(element: ParsedElement) -> str:
+    """
+    Detect if an element is actually a footnote
+    misclassified as text by the parser.
+
+    Returns:
+        "footnote" if detected as footnote
+        "text"     if normal text
+        "acknowledgement" if inline acknowledgement
+    """
+    if not element.content.raw:
+        return "text"
+
+    raw = element.content.raw.strip()
+
+    # Check for inline acknowledgement
+    first_word  = raw.split()[0].lower() if raw.split() else ""
+    first_two   = " ".join(raw.lower().split()[:2])
+    if first_word in INLINE_SKIP_MARKERS \
+            or first_two in INLINE_SKIP_MARKERS:
+        return "acknowledgement"
+
+    # Check for footnote pattern
+    # Footnotes: start with digit + space + capital letter
+    # e.g., "5 We used values of 2.8, 3.7..."
+    if FOOTNOTE_START_PATTERN.match(raw):
+        # Additional check: token count is small (footnotes are short)
+        token_count = element.content.token_count or 0
+        if token_count < 60:
+            return "footnote"
+
+    return "text"
+
+
 def get_section_treatment(element: ParsedElement) -> str:
     """
-    Returns treatment string for a given element based on section title.
+    Returns treatment string for a given element.
 
     Returns:
         "skip"           — discard entirely
@@ -31,55 +98,62 @@ def get_section_treatment(element: ParsedElement) -> str:
         "process_medium" — embed, index, normal weight
         "process_low"    — embed, index, slight penalty
     """
-    raw_title = element.section.title
+    raw_title  = element.section.title
     normalized = normalize_section_title(raw_title)
 
-    # Check for inline acknowledgements buried inside another section
-    # (common pattern: appears at end of Conclusion without its own header)
-    if element.type == "text" and element.content.raw:
-        first_word = element.content.raw.strip().split()[0].lower() \
-            if element.content.raw.strip() else ""
-        first_two = " ".join(
-            element.content.raw.strip().lower().split()[:2]
-        )
-        if first_word in INLINE_SKIP_MARKERS \
-                or first_two in INLINE_SKIP_MARKERS:
-            logger.debug(
-                f"Inline acknowledgement detected in {element.element_id}, "
-                f"marking skip"
-            )
-            return "skip"
+    # Detect misclassified element subtypes
+    subtype = detect_element_subtype(element)
 
-    # References — metadata only (store list, never embed)
+    if subtype == "acknowledgement":
+        logger.debug(
+            f"Inline acknowledgement detected in "
+            f"{element.element_id}, marking skip"
+        )
+        return "skip"
+
+    if subtype == "footnote":
+        # Footnotes are processed but merged with anchor
+        # They get the same treatment as their parent section
+        logger.debug(
+            f"Footnote detected in {element.element_id}"
+        )
+        # Fall through to section-based treatment
+        # The chunker will handle merging with adjacent text
+
+    # References — metadata only
     if normalized in {"references", "bibliography"}:
         return "metadata_only"
 
     # Hard skips
     for skip_section in config.SECTIONS_TO_SKIP:
-        if normalized == skip_section or normalized.startswith(skip_section):
+        if normalized == skip_section \
+                or normalized.startswith(skip_section):
             return "skip"
 
     # High importance
     for high_section in config.SECTIONS_HIGH:
-        if normalized == high_section or normalized.startswith(high_section):
+        if normalized == high_section \
+                or normalized.startswith(high_section):
             return "process_high"
 
     # Low importance
     for low_section in config.SECTIONS_LOW:
-        if normalized == low_section or normalized.startswith(low_section):
+        if normalized == low_section \
+                or normalized.startswith(low_section):
             return "process_low"
 
     # Default: medium
-    # Better to embed something useless than skip something useful
     logger.debug(
-        f"Unknown section '{raw_title}' normalized to '{normalized}', "
-        f"defaulting to process_medium"
+        f"Unknown section '{raw_title}' -> "
+        f"'{normalized}', defaulting to process_medium"
     )
     return "process_medium"
 
 
 def should_embed(treatment: str) -> bool:
-    return treatment in {"process_high", "process_medium", "process_low"}
+    return treatment in {
+        "process_high", "process_medium", "process_low"
+    }
 
 
 def get_importance_from_treatment(treatment: str) -> str:
@@ -104,10 +178,13 @@ def get_boost_from_treatment(treatment: str) -> float:
     return mapping.get(treatment, 1.00)
 
 
-def get_query_affinities(element: ParsedElement, treatment: str) -> list[str]:
+def get_query_affinities(
+    element: ParsedElement,
+    treatment: str,
+) -> list[str]:
     """
-    Assign query affinity tags based on element content type and level.
-    These are used at retrieval time for mode routing.
+    Assign query affinity tags based on element content type.
+    Used at retrieval time for mode routing.
     """
     affinities = []
 
@@ -120,12 +197,14 @@ def get_query_affinities(element: ParsedElement, treatment: str) -> list[str]:
     elif element.type == "figure":
         affinities.append("figure")
     else:
-        # Text: broad vs specific depends on section
         if treatment == "process_high":
-            normalized = normalize_section_title(element.section.title)
+            normalized = normalize_section_title(
+                element.section.title
+            )
             broad_sections = {
                 "abstract", "introduction", "conclusion",
-                "discussion", "related work", "background"
+                "discussion", "related work", "background",
+                "contributions",
             }
             if any(b in normalized for b in broad_sections):
                 affinities.append("broad")
