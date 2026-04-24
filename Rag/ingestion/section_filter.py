@@ -8,32 +8,11 @@ from core.models import ParsedElement
 from core.logger import get_logger
 from core.utils import normalize_section_title
 import config
-
-logger = get_logger(__name__)
-
-# Inline section markers that may appear without a formal header
-INLINE_SKIP_MARKERS = {
-    "acknowledgements",
-    "acknowledgments",
-    "acknowledgement",
-    "acknowledgment",
-}
-
-
-# ingestion/section_filter.py
-"""
-Determines treatment for every element based on its section.
-"""
-
-from core.models import ParsedElement
-from core.logger import get_logger
-from core.utils import normalize_section_title
-import config
 import re
 
 logger = get_logger(__name__)
 
-# Inline section markers that appear without a formal header
+# Inline section markers that may appear without a formal header
 INLINE_SKIP_MARKERS = {
     "acknowledgements",
     "acknowledgments",

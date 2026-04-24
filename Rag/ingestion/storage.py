@@ -343,59 +343,123 @@ class QdrantStorage:
             ) from e
 
 
-    def update_chunk_raptor_links(
-        self,
-        chunk_id_field: str,
-        chunk_id_value: str,
-        parent_ids: list[str],
-        cluster_ids: list[int],
-        cluster_probabilities: dict[str, float],
-        sibling_ids: list[str],
-    ):
-        """
-        Update RAPTOR tree link fields on existing chunks.
-        Works with both local and server Qdrant.
-        """
-        try:
-            # First find the point ID for this chunk_id
-            results, _ = self.client.scroll(
-                collection_name = self.collection,
-                scroll_filter   = Filter(
-                    must=[
-                        FieldCondition(
-                            key   = chunk_id_field,
-                            match = MatchValue(value=chunk_id_value),
-                        )
-                    ]
-                ),
-                with_payload = False,
-                with_vectors = False,
-                limit        = 1,
+def update_chunk_raptor_links(
+    self,
+    chunk_id_field: str,
+    chunk_id_value: str,
+    parent_ids: list[str],
+    cluster_ids: list[int],
+    cluster_probabilities: dict[str, float],
+    sibling_ids: list[str],
+):
+    """
+    Update RAPTOR tree link fields on existing chunks in Qdrant.
+
+    CRITICAL FIX:
+    Local Qdrant does not support set_payload with Filter.
+    Must first scroll to get the point UUID,
+    then use set_payload with list of UUIDs.
+    This works in both local and server mode.
+    """
+    try:
+        # Step 1: Find the point UUID for this chunk_id
+        results, _ = self.client.scroll(
+            collection_name = self.collection,
+            scroll_filter   = Filter(
+                must=[
+                    FieldCondition(
+                        key   = chunk_id_field,
+                        match = MatchValue(value=chunk_id_value),
+                    )
+                ]
+            ),
+            with_payload = False,   # don't need payload, just UUID
+            with_vectors = False,
+            limit        = 1,
+        )
+
+        if not results:
+            logger.warning(
+                f"Chunk '{chunk_id_value}' not found in Qdrant "
+                f"for RAPTOR link update. Skipping."
             )
+            return
 
-            if not results:
-                logger.warning(
-                    f"Chunk '{chunk_id_value}' not found in Qdrant "
-                    f"for RAPTOR link update"
-                )
-                return
+        # Step 2: Use point UUID (not Filter) for set_payload
+        # This is the fix — local Qdrant requires UUID list
+        point_uuid = results[0].id
 
-            # Use point UUID for set_payload (works in local mode)
-            point_uuid = results[0].id
+        # Step 3: Build payload update
+        # Only update non-empty fields to avoid overwriting
+        # existing data with empty lists
+        payload_update = {}
 
-            self.client.set_payload(
-                collection_name = self.collection,
-                payload         = {
-                    "parent_ids":            parent_ids,
-                    "cluster_ids":           cluster_ids,
-                    "cluster_probabilities": cluster_probabilities,
-                    "sibling_ids":           sibling_ids,
-                },
-                points = [point_uuid],   # list of UUIDs, not Filter
-            )
+        if parent_ids is not None:
+            payload_update["parent_ids"] = parent_ids
 
-        except Exception as e:
-            raise StorageError(
-                f"Failed to update RAPTOR links for "
-                f"'{chunk_id_value}': {e}"
-            ) from e
+        if cluster_ids is not None:
+            payload_update["cluster_ids"] = [
+                int(c) for c in cluster_ids
+            ]
+
+        if cluster_probabilities is not None:
+            payload_update["cluster_probabilities"] = {
+                str(k): float(v)
+                for k, v in cluster_probabilities.items()
+            }
+
+        if sibling_ids is not None:
+            payload_update["sibling_ids"] = sibling_ids
+
+        if not payload_update:
+            return
+
+        # Step 4: Update using UUID list
+        self.client.set_payload(
+            collection_name = self.collection,
+            payload         = payload_update,
+            points          = [point_uuid],  # UUID list, not Filter
+        )
+
+    except Exception as e:
+        raise StorageError(
+            f"Failed to update RAPTOR links for "
+            f"'{chunk_id_value}': {e}"
+        ) from e
+
+
+def get_chunks_by_level(
+    self,
+    paper_id: str,
+    level: int,
+) -> list:
+    """
+    Get all chunks of a specific level for a paper.
+    Returns list of scroll results with payload.
+    Used by RAPTOR pipeline for backfilling parent links.
+    """
+    try:
+        results, _ = self.client.scroll(
+            collection_name = self.collection,
+            scroll_filter   = Filter(
+                must=[
+                    FieldCondition(
+                        key   = "paper_id",
+                        match = MatchValue(value=paper_id),
+                    ),
+                    FieldCondition(
+                        key   = "level",
+                        match = MatchValue(value=level),
+                    ),
+                ]
+            ),
+            with_payload = True,
+            with_vectors = False,
+            limit        = 10_000,
+        )
+        return results
+    except Exception as e:
+        raise StorageError(
+            f"Failed to get level={level} chunks "
+            f"for '{paper_id}': {e}"
+        ) from e
