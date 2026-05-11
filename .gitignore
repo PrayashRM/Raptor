@@ -23,3 +23,5 @@ dist/
 venv/
 logs/
 *.log
+
+test.py
