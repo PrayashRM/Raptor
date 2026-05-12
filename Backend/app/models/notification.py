@@ -1,0 +1,1 @@
+# NotificationResponse, PaginatedNotificationsResponse (data + next_cursor + has_more + unread_count).

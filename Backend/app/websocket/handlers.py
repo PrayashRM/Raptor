@@ -1,0 +1,1 @@
+# handle_message(ws, raw_message): parses message type, routes to correct handler. auth → auth_handler, subscribe_chat → sets active paper on connection, message → chat_handler, ping → sends pong.

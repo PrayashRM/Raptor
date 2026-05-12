@@ -1,0 +1,1 @@
+# Async SQLAlchemy engine from DATABASE_URL. AsyncSessionLocal factory. get_db() async generator dependency: yields session, commits on success, rolls back on exception, always closes.

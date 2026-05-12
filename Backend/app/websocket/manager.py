@@ -1,0 +1,1 @@
+# ConnectionManager: in-memory dict of user_id → WebSocket. register(user_id, ws), unregister(user_id), send_to_user(user_id, message). Redis pub/sub subscriber so messages pushed from Celery workers reach the right instance in a multi-instance deploy.

@@ -1,0 +1,1 @@
+# Semantic Scholar Academic Graph API client. Implements ScholarClient. Maps /paper/search response to ExternalPaper.

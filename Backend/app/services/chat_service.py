@@ -1,0 +1,1 @@
+# send_message(): fetches recent messages + rolling summary, calls rag/ retriever and generator, streams tokens via WebSocket, saves assistant message, triggers summarizer if turn threshold hit. get_history(), clear_history().

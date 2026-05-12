@@ -1,0 +1,1 @@
+# bulk_insert_chunks(), similarity_search(query_embedding, paper_id, top_k) using pgvector <=> cosine distance operator, delete_by_paper().

@@ -1,0 +1,1 @@
+# compute_sha256(data: bytes) → str — content hash for file deduplication.

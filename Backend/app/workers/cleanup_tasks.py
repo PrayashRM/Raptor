@@ -1,0 +1,1 @@
+# Periodic (Celery Beat): purge expired refresh tokens (daily), soft-delete old cleared chat messages (weekly), refresh public stats cache (every 5 min).

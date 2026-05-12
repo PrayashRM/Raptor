@@ -1,0 +1,1 @@
+# create(), update(), delete(), add_paper(), remove_paper(), list_papers(). Validates collection ownership before mutations.

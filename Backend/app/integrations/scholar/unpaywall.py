@@ -1,0 +1,1 @@
+# Unpaywall API: given a DOI, resolves an open-access PDF URL. Called during ingest to fetch the actual file.

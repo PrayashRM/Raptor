@@ -1,0 +1,1 @@
+# RefreshToken: id, user_id (FK), token_hash, expires_at, revoked (bool), created_at. logout-all sets revoked=true on all records for user_id.

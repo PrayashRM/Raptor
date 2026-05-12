@@ -1,0 +1,1 @@
+# Abstract EmailClient: send(to: str, subject: str, html: str) → bool.

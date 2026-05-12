@@ -1,0 +1,1 @@
+# Production overrides: no volume mounts, env from secrets manager, resource limits, health checks.

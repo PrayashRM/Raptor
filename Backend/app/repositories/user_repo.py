@@ -1,0 +1,1 @@
+# get_by_id(), get_by_email(), create(), update(), delete(), count_all().

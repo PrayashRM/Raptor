@@ -1,0 +1,1 @@
+#Dev shortcuts: make dev (run server), make migrate (run alembic), make test, make lint, make docker-up.

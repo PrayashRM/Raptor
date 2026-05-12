@@ -1,0 +1,1 @@
+# SavedPaper: user_id (FK), paper_id (FK), status (bookmarked/ingested), saved_at. Composite PK on (user_id, paper_id).

@@ -1,0 +1,1 @@
+# WS message schemas: AuthMessage, SubscribeChatMessage, UserChatMessage, ChunkFrame, DoneFrame (answer + sources list + tokens_used), NotificationFrame, RagStatusFrame, AuthOkFrame, AuthErrorFrame.

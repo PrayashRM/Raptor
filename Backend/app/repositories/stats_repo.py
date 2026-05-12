@@ -1,0 +1,1 @@
+# count_users(), count_papers(), count_rags_ready(), count_conversations(), count_active_users(days=7), avg_rag_build_time_ms().

@@ -1,0 +1,1 @@
+# Resend API client. Implements EmailClient. Simple HTTP POST to Resend's send endpoint.

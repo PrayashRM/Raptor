@@ -1,0 +1,1 @@
+# DiscoverySearchParams (query params), DiscoveryResult (uniform shape: doi, paper_id nullable, title, authors, year, abstract, rag_status, is_in_library), PaginatedDiscoveryResponse.

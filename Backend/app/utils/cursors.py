@@ -1,0 +1,1 @@
+# encode_cursor(sort_value, record_id) → base64 str, decode_cursor(cursor: str) → (sort_value, record_id). Stable cursor encoding for pagination.

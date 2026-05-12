@@ -1,0 +1,1 @@
+# create(), get_by_user(), get_by_id(), update(), delete(), add_paper(), remove_paper(), list_papers(collection_id, cursor, limit).

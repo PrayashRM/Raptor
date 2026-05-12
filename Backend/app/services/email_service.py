@@ -1,0 +1,1 @@
+# send_verification_email(user), send_password_reset_email(user, token). Renders Jinja2 templates and dispatches via email integration client. Called from Celery email tasks, not inline.

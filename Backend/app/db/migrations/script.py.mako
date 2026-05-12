@@ -1,0 +1,1 @@
+# Template for generated migration files. Includes imports for pgvector Vector type.

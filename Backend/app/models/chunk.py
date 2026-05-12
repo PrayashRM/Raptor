@@ -1,0 +1,1 @@
+# Chunk: id, paper_id (FK), chunk_index, section, page_number, text, embedding (pgvector Vector(1536)), created_at. Cosine similarity index on embedding column.

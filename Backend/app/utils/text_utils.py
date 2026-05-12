@@ -1,0 +1,1 @@
+# normalize_tag(label) → lowercase stripped str, count_tokens(text) → int via tiktoken (used to decide when to trigger rolling summary).

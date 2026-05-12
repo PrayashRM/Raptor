@@ -1,0 +1,1 @@
+# handle_chat_message(user, paper_id, content, ws): calls chat_service.send_message(), streams chunk frames to ws as they arrive from LLM, sends final done frame with sources. Handles mid-stream disconnects gracefully.

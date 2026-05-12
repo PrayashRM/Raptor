@@ -1,0 +1,1 @@
+# detect_mime_type(file_bytes) → str, validate_file_size(size, max_mb=50), sanitize_filename(name) → safe str.

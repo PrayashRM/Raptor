@@ -1,0 +1,1 @@
+# ErrorDetail (code, message, details dict, request_id), ErrorResponse wrapper. Standard shape returned by all error responses.

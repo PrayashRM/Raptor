@@ -1,0 +1,1 @@
+# Generic CursorPage[T] schema wrapping any list response with next_cursor, has_more, limit fields.

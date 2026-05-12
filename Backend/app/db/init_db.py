@@ -1,0 +1,1 @@
+# run_async_init(): enables pgvector extension (CREATE EXTENSION IF NOT EXISTS vector), creates tables in dev. Called from main.py startup hook in development only.

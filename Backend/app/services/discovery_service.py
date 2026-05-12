@@ -1,0 +1,1 @@
+# search(): calls configured scholar client(s), deduplicates results by DOI, annotates each result with rag_status from DB and is_in_library for the current user.

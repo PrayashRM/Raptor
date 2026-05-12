@@ -1,0 +1,1 @@
+# ChatSession: id, user_id (FK), paper_id (FK), rolling_summary (Text nullable), cleared_at (nullable), created_at. Unique constraint on (user_id, paper_id).

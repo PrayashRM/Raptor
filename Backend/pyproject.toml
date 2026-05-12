@@ -1,0 +1,1 @@
+#Project dependencies and metadata managed by Poetry or PDM. Defines Python version, FastAPI, SQLAlchemy, Alembic, Celery, Redis, pgvector, boto3, etc.

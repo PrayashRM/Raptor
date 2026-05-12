@@ -1,0 +1,1 @@
+# Local dev stack: FastAPI app, PostgreSQL with pgvector extension, Redis, Celery worker, Flower (Celery monitoring UI).

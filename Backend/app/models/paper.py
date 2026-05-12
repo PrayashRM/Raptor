@@ -1,0 +1,1 @@
+# PaperUploadRequest (form fields alongside file), PaperIngestRequest (source, doi, url, user_context), PaperResponse (full detail including tags, collections, chunk_preview), PaperMetadataUpdate, PaperStatusResponse, PipelineTraceResponse.

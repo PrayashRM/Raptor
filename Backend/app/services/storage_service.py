@@ -1,0 +1,1 @@
+# upload_file(file_bytes, key) → stored url, generate_presigned_url(key, expires=900) → time-limited url, delete_file(key). Wraps the storage integration client.

@@ -1,0 +1,1 @@
+# PublicStatsResponse (total_papers, total_rags_ready, total_conversations, last_updated), AdminStatsResponse (adds active_users_7d, avg_rag_build_time_ms).

@@ -1,0 +1,1 @@
+# Validates JWT from auth message, attaches user_id to connection state, sends auth_ok frame. Sends auth_error and closes connection on invalid token. Connection is blocked until auth_ok.

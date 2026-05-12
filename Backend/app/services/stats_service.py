@@ -1,0 +1,1 @@
+# get_public_stats(): reads from Redis cache, falls back to stats_repo, re-caches for 5 min. get_admin_stats(): always hits DB for full real-time metrics.

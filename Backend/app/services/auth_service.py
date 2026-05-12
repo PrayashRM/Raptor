@@ -1,0 +1,1 @@
+# signup(), login(), logout(), logout_all(), refresh_token(), verify_email(), forgot_password(), reset_password(). Orchestrates user creation, token lifecycle, email dispatch via email_service.

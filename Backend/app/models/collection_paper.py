@@ -1,0 +1,1 @@
+# CollectionPaper: collection_id (FK), paper_id (FK), added_at. Composite PK on (collection_id, paper_id).

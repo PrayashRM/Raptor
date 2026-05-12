@@ -1,0 +1,1 @@
+# ChatMessage: id, session_id (FK), role (user/assistant), content (Text), sources (JSONB nullable — chunk refs, page numbers, confidence), tokens_used, is_deleted (soft delete), created_at.

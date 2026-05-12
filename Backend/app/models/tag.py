@@ -1,0 +1,1 @@
+# Tag: id, user_id (FK), paper_id (FK), label (normalized lowercase, max 50 chars), created_at. Unique on (user_id, paper_id, label).

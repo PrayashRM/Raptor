@@ -1,0 +1,1 @@
+# UserResponse (id, name, email, avatar_url, institution, role, created_at), ProfileUpdateRequest.

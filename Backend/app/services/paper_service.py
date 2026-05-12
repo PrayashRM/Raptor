@@ -1,0 +1,1 @@
+# upload_paper(), ingest_from_doi(), get_paper_detail(), update_metadata(), save_to_library(). Core dedup logic: check DOI/hash → case 1 (ready), case 2 (trigger pipeline), case 3 (subscribe to in-progress). Dispatches Celery task.

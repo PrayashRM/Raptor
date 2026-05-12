@@ -1,0 +1,1 @@
+# CollectionCreate, CollectionUpdate, CollectionResponse, PaginatedCollectionPapersResponse.

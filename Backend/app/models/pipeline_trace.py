@@ -1,0 +1,1 @@
+# PipelineTrace: id, paper_id (FK unique — one trace per paper), steps (JSONB array), total_duration_ms, triggered_by (FK → User), triggered_at.

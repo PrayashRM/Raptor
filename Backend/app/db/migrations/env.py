@@ -1,0 +1,1 @@
+# Imports all models so autogenerate detects changes. Reads DATABASE_URL from settings. Configured for async migrations via run_async_migrations().
