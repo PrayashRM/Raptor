@@ -1,1 +1,0 @@
-# Celery app factory. Broker and result backend both use Redis. Task serializer: JSON. Routes: rag tasks → rag queue, email tasks → email queue, cleanup tasks → default queue. Beat schedule for periodic tasks.

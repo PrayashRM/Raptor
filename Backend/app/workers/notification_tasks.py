@@ -1,1 +1,0 @@
-# notify_rag_ready(paper_id): creates DB notification for all users subscribed to this paper, pushes to their open WebSocket connections via Redis pub/sub.

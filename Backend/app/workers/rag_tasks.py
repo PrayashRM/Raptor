@@ -1,1 +1,0 @@
-# process_paper(paper_id): the main async task. Calls rag.pipeline.run(paper_id). Updates rag_status to queued→processing on start. On success: sets ready, releases lock, notifies subscribers. On failure: sets failed, releases lock. Max 3 retries with exponential backoff.

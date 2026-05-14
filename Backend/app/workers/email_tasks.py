@@ -1,1 +1,0 @@
-# send_verification_email(user_id), send_password_reset_email(user_id, token). Async so they never block request/response cycle.
