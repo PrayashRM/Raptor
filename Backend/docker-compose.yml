@@ -1,1 +1,278 @@
-# Local dev stack: FastAPI app, PostgreSQL with pgvector extension, Redis, Celery worker, Flower (Celery monitoring UI).
+# ==============================================================================
+# docker-compose.yml — Local Development Environment
+#
+# Services:
+#   postgres  → pgvector/pgvector:pg16 database
+#   pgadmin   → Database management UI at http://localhost:5050
+#   backend   → FastAPI app with hot reload at http://localhost:8000
+#
+# Future services (uncomment when ready):
+#   redis     → Rate limiting, job queue, stats cache
+#   worker    → ARQ async task worker
+#
+# Usage:
+#   docker compose up --build     first run or after dependency changes
+#   docker compose up             normal daily start
+#   docker compose down           stop everything (data safe)
+#   docker compose down -v        stop and DELETE all data (fresh start)
+# ==============================================================================
+
+name: reslens
+
+# ------------------------------------------------------------------------------
+# Networks
+# All containers join this network and can reach each other
+# by service name (e.g. backend connects to postgres via hostname "postgres")
+# ------------------------------------------------------------------------------
+networks:
+  reslens_network:
+    driver: bridge
+
+# ------------------------------------------------------------------------------
+# Volumes
+# Named volumes are managed by Docker and persist across container restarts.
+# Data is NOT lost when you run docker compose down (only down -v deletes it).
+# ------------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+# ------------------------------------------------------------------------------
+# Services
+# ------------------------------------------------------------------------------
+services:
+
+  # ----------------------------------------------------------------------------
+  # PostgreSQL with pgvector
+  # Image: pgvector/pgvector:pg16
+  #   → PostgreSQL 16 with pgvector extension pre-installed
+  #   → No separate extension installation required
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: reslens-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # Optimise PostgreSQL for development
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+
+    ports:
+      # host:container
+      # Exposes postgres on your Windows machine at localhost:5432
+      # Useful for connecting with external tools (DBeaver, psql, etc.)
+      - "${POSTGRES_PORT:-5432}:5432"
+
+    volumes:
+      # Persist all database data across container restarts
+      - postgres_data:/var/lib/postgresql/data
+
+      # Initialisation scripts — run ONCE when the volume is first created
+      # If postgres_data volume already exists, these scripts are skipped
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+
+    networks:
+      - reslens_network
+
+    # Health check — Docker uses this to know when postgres is truly ready
+    # Other services use depends_on condition: service_healthy to wait for this
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s      # check every 5 seconds
+      timeout: 5s       # fail if no response within 5 seconds
+      retries: 10       # try 10 times before marking unhealthy
+      start_period: 10s # wait 10s after container start before first check
+
+  # ----------------------------------------------------------------------------
+  # pgAdmin — Database Management UI
+  # Access at http://localhost:5050
+  # Login: PGADMIN_DEFAULT_EMAIL / PGADMIN_DEFAULT_PASSWORD from .env
+  #
+  # To connect to postgres inside pgAdmin:
+  #   Host:     postgres       ← service name, NOT localhost
+  #   Port:     5432
+  #   Database: ResLens
+  #   Username: reslens_user
+  #   Password: reslens_password
+  # ----------------------------------------------------------------------------
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: reslens-pgadmin
+    restart: unless-stopped
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      # Disable the master password prompt (dev convenience)
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+
+    volumes:
+      # Persist pgAdmin settings, saved server connections, etc.
+      - pgadmin_data:/var/lib/pgadmin
+
+      # Pre-configure the postgres server connection so you dont
+      # have to manually register the server every time
+      - ./scripts/pgadmin-servers.json:/pgadmin4/servers.json:ro
+
+    networks:
+      - reslens_network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------------------
+  # Backend — FastAPI Application
+  # Builds from our Dockerfile (development stage)
+  # Hot reload enabled — edit code on your machine, see changes instantly
+  # Runs Alembic migrations automatically on startup
+  # Access at http://localhost:8000
+  # Swagger UI at http://localhost:8000/docs
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Use the development stage (hot reload, dev tools)
+      target: development
+
+    container_name: reslens-backend
+    restart: unless-stopped
+
+    environment:
+      # Override any .env values here for Docker-specific settings
+      APP_ENV: development
+      DEBUG: "true"
+
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+
+      # IMPORTANT: host must be "postgres" (service name) not "localhost"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB}
+
+      # Pass through all other settings from .env
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS}
+
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_ACCESS_KEY: ${R2_ACCESS_KEY}
+      R2_SECRET_KEY: ${R2_SECRET_KEY}
+      R2_ENDPOINT_URL: ${R2_ENDPOINT_URL}
+      PRESIGN_EXPIRY_SECONDS: ${PRESIGN_EXPIRY_SECONDS}
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      CHAT_MODEL: ${CHAT_MODEL}
+      EMBED_MODEL: ${EMBED_MODEL}
+
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME}
+
+      OPENALEX_BASE_URL: ${OPENALEX_BASE_URL}
+      SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY}
+      UNPAYWALL_EMAIL: ${UNPAYWALL_EMAIL}
+      SCHOLAR_TIMEOUT_SECONDS: ${SCHOLAR_TIMEOUT_SECONDS}
+
+      RAG_SERVICE_URL: ${RAG_SERVICE_URL}
+      RAG_SERVICE_API_KEY: ${RAG_SERVICE_API_KEY}
+      RAG_SERVICE_TIMEOUT_SECONDS: ${RAG_SERVICE_TIMEOUT_SECONDS}
+
+      RATE_LIMIT_AUTH: ${RATE_LIMIT_AUTH}
+      RATE_LIMIT_AUTH_WINDOW: ${RATE_LIMIT_AUTH_WINDOW}
+      RATE_LIMIT_UPLOAD: ${RATE_LIMIT_UPLOAD}
+      RATE_LIMIT_UPLOAD_WINDOW: ${RATE_LIMIT_UPLOAD_WINDOW}
+      RATE_LIMIT_DISCOVERY: ${RATE_LIMIT_DISCOVERY}
+      RATE_LIMIT_DISCOVERY_WINDOW: ${RATE_LIMIT_DISCOVERY_WINDOW}
+      RATE_LIMIT_GENERAL: ${RATE_LIMIT_GENERAL}
+      RATE_LIMIT_GENERAL_WINDOW: ${RATE_LIMIT_GENERAL_WINDOW}
+
+      STATS_CACHE_TTL_SECONDS: ${STATS_CACHE_TTL_SECONDS}
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      # Bind mount — your local code folder is mounted into the container
+      # This makes hot reload work:
+      #   You edit app/main.py on Windows → container sees it instantly
+      #   uvicorn --reload detects the change → server restarts automatically
+      - ./app:/app/app:rw
+      - ./scripts:/app/scripts:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+
+    networks:
+      - reslens_network
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # Run migrations then start the server
+    # If migrations fail, container exits with error (visible in logs)
+    command: >
+      sh -c "
+        echo '--- Running Alembic migrations ---' &&
+        alembic upgrade head &&
+        echo '--- Migrations complete. Starting server ---' &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+  # ----------------------------------------------------------------------------
+  # Redis — Uncomment when ready to integrate
+  # ----------------------------------------------------------------------------
+  # redis:
+  #   image: redis:7.2-alpine
+  #   container_name: reslens-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - reslens_network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+  #   command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+  # ----------------------------------------------------------------------------
+  # ARQ Worker — Uncomment when ready to integrate
+  # ----------------------------------------------------------------------------
+  # worker:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: development
+  #   container_name: reslens-worker
+  #   restart: unless-stopped
+  #   environment:
+  #     <<: *backend-env
+  #   volumes:
+  #     - ./app:/app/app:rw
+  #   networks:
+  #     - reslens_network
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   command: arq app.workers.settings.WorkerSettings
